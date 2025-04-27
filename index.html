@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Dodge</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f8fafc;
+        }
+        header {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #4F46E5;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            max-width: 480px;
+            width: 100%;
+        }
+        .game-container {
+            position: relative;
+            width: 480px;
+            height: 360px;
+            background: #f1f5f9;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        canvas {
+            touch-action: none;
+        }
+        .game-over {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            gap: 1rem;
+        }
+        .game-over h2 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 0;
+        }
+        .game-over p {
+            font-size: 1.25rem;
+            margin: 0;
+        }
+        input {
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            border: none;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            background: #4F46E5;
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        .score {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+        .top-scores h3 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .top-scores ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        @media (max-width: 500px) {
+            .game-container {
+                width: 100%;
+                height: 75vw;
+            }
+            canvas {
+                width: 100%;
+                height: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="title">Space Dodge</div>
+    </header>
+    <main>
+        <div class="container">
+            <div class="game-container">
+                <canvas id="gameCanvas" width="480" height="360"></canvas>
+            </div>
+            <div class="score">Score: <span id="scoreDisplay">0</span></div>
+            <div class="top-scores">
+                <h3>Top Scores</h3>
+                <ul id="topScoresList"></ul>
+            </div>
+        </div>
+    </main>
+    <script>
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.score = 0;
+                this.gameOver = false;
+                this.obstacles = [];
+                this.playerY = this.canvas.height / 2;
+                this.speed = 2;
+                this.player = {
+                    x: 50,
+                    width: 30,
+                    height: 30
+                };
+                this.setupEventListeners();
+                this.loadTopScores();
+                this.gameLoop();
+            }
+
+            setupEventListeners() {
+                const handleTouch = (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.playerY = ((touch.clientY - rect.top) / rect.height) * this.canvas.height;
+                };
+
+                const handleMouse = (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.playerY = ((e.clientY - rect.top) / rect.height) * this.canvas.height;
+                };
+
+                this.canvas.addEventListener('touchmove', handleTouch);
+                this.canvas.addEventListener('mousemove', handleMouse);
+                this.canvas.addEventListener('touchstart', handleTouch);
+            }
+
+            addObstacle() {
+                const height = Math.random() * (this.canvas.height / 3) + 30;
+                this.obstacles.push({
+                    x: this.canvas.width,
+                    y: Math.random() * (this.canvas.height - height),
+                    width: 20,
+                    height
+                });
+            }
+
+            loadTopScores() {
+                const scores = JSON.parse(localStorage.getItem('topScores') || '[]');
+                this.updateScoreDisplay(scores);
+            }
+
+            saveScore(playerName) {
+                const scores = JSON.parse(localStorage.getItem('topScores') || '[]');
+                scores.push({ playerName, score: this.score });
+                scores.sort((a, b) => b.score - a.score);
+                const topScores = scores.slice(0, 5);
+                localStorage.setItem('topScores', JSON.stringify(topScores));
+                this.updateScoreDisplay(topScores);
+            }
+
+            updateScoreDisplay(scores) {
+                const list = document.getElementById('topScoresList');
+                list.innerHTML = scores
+                    .map((score, i) => `<li>${i + 1}. ${score.playerName}: ${score.score}</li>`)
+                    .join('');
+            }
+
+            showGameOver() {
+                const overlay = document.createElement('div');
+                overlay.className = 'game-over';
+                overlay.innerHTML = `
+                    <h2>Game Over!</h2>
+                    <p>Score: ${this.score}</p>
+                    <input type="text" id="playerName" placeholder="Enter your name">
+                    <button onclick="game.restart()">Play Again</button>
+                `;
+                this.canvas.parentElement.appendChild(overlay);
+            }
+
+            restart() {
+                const playerName = document.getElementById('playerName').value.trim();
+                if (playerName) {
+                    this.saveScore(playerName);
+                }
+                this.score = 0;
+                this.gameOver = false;
+                this.obstacles = [];
+                this.speed = 2;
+                const overlay = document.querySelector('.game-over');
+                if (overlay) overlay.remove();
+                this.gameLoop();
+            }
+
+            gameLoop(timestamp) {
+                if (!this.lastObstacleTime) this.lastObstacleTime = timestamp;
+                const obstacleInterval = 2000;
+
+                if (timestamp - this.lastObstacleTime > obstacleInterval) {
+                    this.addObstacle();
+                    this.lastObstacleTime = timestamp;
+                }
+
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw player
+                this.ctx.fillStyle = '#4F46E5';
+                this.ctx.fillRect(
+                    this.player.x,
+                    this.playerY - this.player.height/2,
+                    this.player.width,
+                    this.player.height
+                );
+
+                // Update and draw obstacles
+                this.obstacles = this.obstacles.filter(obstacle => {
+                    obstacle.x -= this.speed;
+                    
+                    // Check collision
+                    if (
+                        this.player.x < obstacle.x + obstacle.width &&
+                        this.player.x + this.player.width > obstacle.x &&
+                        this.playerY - this.player.height/2 < obstacle.y + obstacle.height &&
+                        this.playerY + this.player.height/2 > obstacle.y
+                    ) {
+                        this.gameOver = true;
+                        this.showGameOver();
+                        return false;
+                    }
+
+                    // Draw obstacle
+                    this.ctx.fillStyle = '#EF4444';
+                    this.ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                    
+                    return obstacle.x > -obstacle.width;
+                });
+
+                if (!this.gameOver) {
+                    this.score++;
+                    document.getElementById('scoreDisplay').textContent = this.score;
+                    this.speed = Math.min(8, 2 + Math.floor(this.score / 1000));
+                    requestAnimationFrame(this.gameLoop.bind(this));
+                }
+            }
+        }
+
+        let game = new Game();
+    </script>
+</body>
+</html>
